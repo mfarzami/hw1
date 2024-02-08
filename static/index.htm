@@ -1,6 +1,270 @@
 <html><head>
 <title>INFO 4310 - hw1</title>
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<script src="https://d3js.org/topojson.v2.min.js"></script>
 </head>
+<style>
+body {
+    font-family: Impact, Haettenschweiler, 'Arial Narrow Bold', sans-serif;
+}
+.heading {
+    text-align: center;
+    padding: 20;
+}
+.labels {
+    width: 600;
+    display: flex;
+    justify-content: space-between;
+}
+.svgs {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+}
+.titles {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-evenly;
+}
+.key {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-evenly;
+}
+.sycamore {
+    width: 30;
+    height: 30;
+    margin-right: 20;
+    margin-left: 20;
+    background-color: #e41a1c;
+}
+.xmas {
+    width: 30;
+    height: 30;
+    margin-right: 20;
+    margin-left: 20;
+    background-color: #377eb8;
+}
+.bribane {
+    width: 30;
+    height: 30;
+    margin-right: 20;
+    margin-left: 20;
+    background-color: #4daf4a;
+}
+.victoria {
+    width: 30;
+    height: 30;
+    margin-right: 20;
+    margin-left: 20;
+    background-color: #984ea3;
+}
+.swamp {
+    width: 30;
+    height: 30;
+    margin-right: 20;
+    margin-left: 20;
+    background-color: #ff7f00;
+}
+</style>
 <body>
+    <div class="heading">
+    <h1>SF Trees!</h1>
+    </div>
+    <div class="titles">
+    <h2>Trees by their Age</h2>
+    <div>
+    <h2>Trees by their Species</h2>
+    <p>Five most common species shown</p>
+    </div>
+    </div>
+    <div class="svgs">
+    <svg id="map" height="900" width="900" style="background: #fff; margin-top:50px" ></svg>
+    <svg id="map2" height="900" width="900" style="background: #fff; margin-top:50px" ></svg>
+    </div>
+    <div class="labels">
+    <p class="older">Older: Planted in 1956</p>
+    <p class="newer">Newer: Planted in 2022</p>
+    </div>
+    <div class="svgs">
+    <canvas class="scale" width=600 height=60 id="scale" style="border:1px solid #ccc"></canvas>
+    <div class="key">
+    <div class="sycamore"></div>
+    <p>Sycamore: London Plane</p>
+    <div class="xmas"></div>
+    <p>New Zealand Xmas Tree</p>
+    <div class="bribane"></div>
+    <p>Brisbane Box</p>
+    <div class="victoria"></div>
+    <p>Victorian Box</p>
+    <div class="swamp"></div>
+    <p>Swamp Myrtle</p>
+    </div>
+    </div>
+    <script>
+        const svg = d3.select("#map");
+        const width = svg.attr("width");
+        const height = svg.attr("height");
+        const margin = { top: 20, right: 20, bottom: 20, left:20};
+        const mapWidth = width - margin.left - margin.right;
+        const mapHeight = height - margin.top - margin.bottom;
+        const map = svg.append("g")
+            .attr("transform","translate("+margin.left+","+margin.top+")");
+        
+        const dateMap = async function() {
+            const sf = await d3.json("SF-Neighborhoods.geo.json");
+            const data = await d3.csv("Street_Tree_List-2022-01-30_FILTERED.csv")
+            console.log(data);
+
+            var neighborhoods = topojson.feature(sf, sf.objects.SFNeighborhoods);
+            var projection = d3.geoMercator().fitSize([mapWidth, mapHeight], neighborhoods);
+            var path = d3.geoPath().projection(projection);
+
+            //find year of plant date as number
+            data.forEach( d => {
+                if (d.PlantDate) { 
+                const dateVar = d.PlantDate;
+                const dateString = dateVar.split(' ')[0];
+                const yearString = dateString.split('/')[2];
+                let year = Number(yearString.length === 2 ? (Number(yearString) < 24 ? "20" + yearString : "19" + yearString) : yearString);
+                    d.yearNumber = year;
+                } else {
+                    d.yearNumber = null;
+                }
+            });
+
+            //create color scale
+            let dateExtent = d3.extent(data, d => d.yearNumber);
+            let colorScale = d3.scaleSequential(d3.interpolateViridis).domain(dateExtent)
+
+            //create map
+            map.selectAll("path.neighborhood").data(neighborhoods.features)
+                .join("path")
+                .attr("class", "neighborhood")
+                .attr("fill", "white")
+                .attr("stroke", "grey")
+                .attr("d", path);
+            
+            //add trees
+            data.forEach( d => {
+                d.Position = projection( [d.Longitude, d.Latitude] );
+            });
+    
+            map.selectAll("circle").data(data)
+                .join("circle")
+                .attr("r", 2.5)
+                .attr("fill", d => d.yearNumber ? colorScale(d.yearNumber) : "white")
+                .attr("opacity", d => d.yearNumber ? 1 : 0)
+                .attr("cx", d => d.Position[0])
+                .attr("cy", d => d.Position[1]);
+
+            //add color key
+            function createColorGradient( canvasElement, colorScale ) { //from 3300 final
+  
+            const width = canvasElement.attr("width");
+            const height = canvasElement.attr("height");
+            colorScale = colorScale.copy().domain([0, width]);
+  
+            const context = canvasElement.node().getContext('2d');
+            context.clearRect(0, 0, width, height);
+
+            for (var x=0; x<width-1; x++){
+            const color = colorScale(x);
+            context.fillStyle = color;
+            context.beginPath();
+            context.rect(x, 0, x+1, height);
+            context.fill();
+            } }
+
+            createColorGradient( d3.select("canvas#scale"), d3.scaleSequential(d3.interpolateViridis) );
+            }
+            dateMap();
+
+        //species map
+        const svg2 = d3.select("#map2");
+        const width2 = svg2.attr("width");
+        const height3 = svg2.attr("height");
+        const margin2 = {top: 10, right: 10, bottom: 50, left: 50};
+        const map2 = svg2.append("g")
+            .attr("transform","translate("+margin.left+","+margin.top+")");
+
+        const chartWidth2 = width - margin.left - margin.right;
+        const chartHeight2 = height - margin.top - margin.bottom;
+
+        const speciesMap = async function() {
+         const sf = await d3.json("SF-Neighborhoods.geo.json");
+            const data = await d3.csv("Street_Tree_List-2022-01-30_FILTERED.csv")
+
+            var neighborhoods = topojson.feature(sf, sf.objects.SFNeighborhoods);
+            var projection = d3.geoMercator().fitSize([mapWidth, mapHeight], neighborhoods);
+            var path = d3.geoPath().projection(projection);
+
+            //clean species data
+            data.forEach( d => {
+                if (d.qSpecies) { 
+                const speciesVar = d.qSpecies
+                const speciesString = speciesVar.split(':: ')[1];
+                d.species = speciesString;
+                } else {speciesString
+                    d.species = null;
+                }
+            });
+
+            //find unique species
+            const uniqueSpecies = Array.from(new Set(data.map(d => d.species))).filter(d => d);
+
+            //GENERATIVE AI OUTPUT BELOW - USED CHATGPT TO FIND TOP 5 SPECIES FOR COLOR SCALE
+            const speciesCounts = data.reduce((acc, {species}) => {
+            if (species) {
+                acc[species] = (acc[species] || 0) + 1;
+            }
+            return acc;
+            }, {});
+
+            const top5speciesPairs = Object.entries(speciesCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5);
+            const top5species = top5speciesPairs.map(pair => pair[0]);
+
+            let colorScale = d3.scaleOrdinal(d3.schemeSet1).domain(top5species);
+            const speciesColorMap = top5species.reduce((acc, species) => {
+                acc[species] = colorScale(species);
+                return acc;
+                }, {});
+            //END OF GENERATIVE AI OUTPUT
+
+            console.log(speciesColorMap);
+
+            //create map
+            map2.selectAll("path.neighborhood").data(neighborhoods.features)
+                .join("path")
+                .attr("class", "neighborhood")
+                .attr("fill", "white")
+                .attr("stroke", "grey")
+                .attr("d", path);
+            
+            //add trees
+            data.forEach( d => {
+                d.Position = projection( [d.Longitude, d.Latitude] );
+            });
+
+            //only show data for top 5 species
+            const top5data = data.filter(d => top5species.includes(d.species));
+    
+            map2.selectAll("circle").data(top5data)
+                .join("circle")
+                .attr("r", 2.5)
+                .attr("fill", d => colorScale(d.species))
+                .attr("opacity", 1)
+                .attr("cx", d => d.Position[0])
+                .attr("cy", d => d.Position[1]);
+        
+            }
+            speciesMap();
+
+        
+
+
+    </script>
 </body>
 </html>
